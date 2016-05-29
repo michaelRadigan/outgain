@@ -1,9 +1,11 @@
 package main
 
 import (
+	"database/sql"
 	"flag"
 	"fmt"
 	"github.com/egnwd/outgain/server/engine"
+	"github.com/lib/pq"
 	"log"
 	"net/http"
 	"os"
@@ -17,6 +19,11 @@ func main() {
 	if port == "" {
 		port = "8080"
 	}
+
+	db, err := openDb()
+
+	fmt.Println("%s, %s", db, err)
+	
 
 	staticDir := flag.String("static-dir", "client/dist", "")
 	redirectPlainHTTP := flag.Bool("redirect-plain-http", false, "")
@@ -45,4 +52,17 @@ func redirectPlainHTTPMiddleware(next http.Handler) http.Handler {
 			next.ServeHTTP(w, r)
 		}
 	})
+}
+
+func openDb() (*sql.DB, error) {
+	url := os.Getenv("DATABASE_URL")
+	connection, _ := pq.ParseURL(url)
+	connection += " sslmode=require"
+
+	db, err := sql.Open("postgres", connection)
+	if err != nil {
+		log.Println(err)
+	}
+
+	return db, err
 }
