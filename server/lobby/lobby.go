@@ -17,8 +17,10 @@ import (
 )
 
 const lobbySize int = 10
+const trainingLobby uint64 = 0
 
 var lobbies = make(map[uint64]*Lobby)
+var trainingLobbies = make(map[string]*Lobby)
 
 // Lobby runs its own instance of an engine, and keeps track of its users
 type Lobby struct {
@@ -64,6 +66,21 @@ func NewLobby(name string, config *config.Config) (lobby *Lobby) {
 	return
 }
 
+func NewTrainingLobby(config *config.Config) (lobby *Lobby) {
+	engine := engine.NewEngine()
+	events := eventsource.New(nil, nil)
+	id := trainingLobby
+	return &Lobby{
+		ID:     id,
+		Name:   "Training Lobby",
+		Engine: engine,
+		Events: events,
+		Guests: generalPopulation(1, config),
+		size:   lobbySize,
+		config: config,
+	}
+}
+
 func newID() uint64 {
 	id := uint64(rand.Uint32())
 	_, ok := lobbies[id]
@@ -82,6 +99,16 @@ func (lobby *Lobby) Start() {
 	if !lobby.isRunning {
 		lobby.isRunning = true
 		go lobby.runEngine()
+	}
+}
+
+func (lobby *Lobby) StartTrainingLobby() {
+	lobby.Lock()
+	defer lobby.Unlock()
+
+	if !lobby.isRunning {
+		lobby.isRunning = true
+		go lobby.runTrainingEngine()
 	}
 }
 
@@ -112,10 +139,40 @@ func (lobby *Lobby) runEngine() {
 	destroyLobby(lobby)
 }
 
+// This must be run in a go routine otherwise it will block the thread
+// may be able to just call runEngine -> TODO: check
+func (lobby *Lobby) runTrainingEngine() {
+	log.Println("Running training lobby")
+
+	var entities engine.EntityList
+	g := lobby.Guests.List[0]
+
+	creature, err := engine.NewCreature(g, lobby.config)
+	if err == nil {
+		log.Printf("Cannot create creature for %s: %v", g, err)
+	} else {
+		entity := lobby.Engine.CreateEntity(creature)
+		entities = append(entities, entity)
+	}
+
+	lobby.Engine.Run(entities)
+	log.Println("Finished Running")
+	log.Printf("Users in Game: %d\n", lobby.Guests.UserSize)
+
+	log.Println("Destroying Lobby")
+	lobby.isRunning = false
+	destroyLobby(lobby)
+}
+
 // GetLobby returns the Lobby with id: `id` and if it does not exist it returns
 // `(nil, false)`
 func GetLobby(id uint64) (*Lobby, bool) {
 	l, ok := lobbies[id]
+	return l, ok
+}
+
+func GetTrainingLobby(username string) (*Lobby, bool) {
+	l, ok := trainingLobbies[username]
 	return l, ok
 }
 
@@ -186,9 +243,14 @@ func (lobby *Lobby) AddUser(username string) error {
 	return nil
 }
 
+func (lobby *Lobby) AddTrainee(username string) {
+	trainingLobbies[username] = lobby
+	lobby.AddUser(username)
+}
+
 // RemoveUser removes the specified user from the lobby, returning an error if the
 // user is not in the lobby
-func (lobby *Lobby) RemoveUser(username string) error {
+func (lobby *Lobby) RemoveUser(username string) {
 	// TODO: Check for duplicates
 	lobbyGuests := lobby.Guests.List
 
@@ -217,7 +279,6 @@ func (lobby *Lobby) RemoveUser(username string) error {
 	lobby.Guests.UserSize--
 
 	lobby.Guests.List = lobbyGuests
-	return nil
 }
 
 func (lobby *Lobby) FindGuest(username string) *guest.Guest {
@@ -228,6 +289,10 @@ func (lobby *Lobby) FindGuest(username string) *guest.Guest {
 	}
 
 	return nil
+}
+
+func (lobby *Lobby) isTraining() bool {
+	return lobby.ID == trainingLobby
 }
 
 type Lobbies []struct {

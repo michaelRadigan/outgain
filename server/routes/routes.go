@@ -40,6 +40,7 @@ func GetHandler(config *config.Config) http.Handler {
 	get.Handle("/lobbies/{id:[0-9]+}/users", c.RequireAuth(http.HandlerFunc(c.LobbiesGetUsers)))
 	post.Handle("/lobbies/join", c.RequireAuth(http.HandlerFunc(c.LobbiesJoin)))
 	post.Handle("/lobbies/create", c.RequireAuth(c.LobbiesCreate(config)))
+	get.Handle("/lobbies/trainingJoin", c.RequireAuth(c.TrainingJoin(config)))
 
 	// Game View
 	get.Handle("/lobbies/{id:[0-9]+}", c.RequireAuth(c.LobbiesGame(config.StaticDir)))

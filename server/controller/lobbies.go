@@ -105,14 +105,54 @@ func LobbiesCreate(config *config.Config) http.Handler {
 	})
 }
 
+func TrainingJoin(config *config.Config) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		l := lobby.NewTrainingLobby(config)
+		log.Printf("Created Training lobby")
+
+		// Get the lobby from the global list
+		//if !ok {
+		//	log.Printf("Issue with joining the training lobby")
+		//	http.Error(w, "Lobby doesn't exist", http.StatusBadRequest)
+		//	return
+		//}
+
+		// Get the username of the authenicated user
+		username, err := GetUserName(r)
+		if err != nil {
+			log.Println(err.Error())
+			http.Error(w, "Something went wrong fam", http.StatusBadRequest)
+			return
+		}
+
+		// Add the trainee to the lobby
+		l.AddTrainee(username)
+
+		l.StartTrainingLobby()
+
+		// Redirect user to the lobby
+		log.Printf("User: %s Joined Training lobby", username)
+		rawurl := fmt.Sprintf("http://%s/lobbies/%d", r.Host, 0)
+		http.Redirect(w, r, rawurl, http.StatusFound)
+	})
+}
+
 func LobbiesGame(staticDir string) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		vars := mux.Vars(r)
 		id, _ := strconv.ParseUint(vars["id"], 10, 64)
-
-		l, ok := lobby.GetLobby(id)
 		username, _ := GetUserName(r)
+		var (
+			l  *lobby.Lobby
+			ok bool
+		)
 
+		if id == 0 {
+			l, ok = lobby.GetTrainingLobby(username)
+		} else {
+			l, ok = lobby.GetLobby(id)
+
+		}
 		if !ok || !l.ContainsUser(username) {
 			u := fmt.Sprintf("http://%s/lobbies", r.Host)
 			http.Redirect(w, r, u, http.StatusFound)
